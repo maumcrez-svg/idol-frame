@@ -1,0 +1,7 @@
+export { EntityStore } from './entity-store.js'
+export { IdentityCoreManager } from './identity-core-manager.js'
+export { VoiceRegistry } from './voice-registry.js'
+export { TraitEngine } from './trait-engine.js'
+export { LoreGraph } from './lore-graph.js'
+export { AestheticRegistry } from './aesthetic-registry.js'
+export { SnapshotManager } from './snapshot-manager.js'

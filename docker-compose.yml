@@ -1,0 +1,13 @@
+services:
+  idol-frame:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - idol-data:/app/data
+    env_file:
+      - .env
+    restart: unless-stopped
+
+volumes:
+  idol-data:

@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "declaration": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@idol-frame/schema": ["./packages/schema/src"],
+      "@idol-frame/llm": ["./packages/llm/src"],
+      "@idol-frame/storage": ["./packages/storage/src"],
+      "@idol-frame/identity": ["./packages/identity/src"],
+      "@idol-frame/state": ["./packages/state/src"],
+      "@idol-frame/cognition": ["./packages/cognition/src"],
+      "@idol-frame/performance": ["./packages/performance/src"],
+      "@idol-frame/runtime": ["./packages/runtime/src"],
+      "@idol-frame/evaluation": ["./packages/evaluation/src"]
+    }
+  },
+  "include": ["packages/*/src/**/*"]
+}

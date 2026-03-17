@@ -298,7 +298,10 @@ describe('PerformanceEvaluator', () => {
       expect(result).toHaveProperty('voice_score')
       expect(result).toHaveProperty('guardrail_result')
       expect(result).toHaveProperty('quality_score')
+      expect(result).toHaveProperty('grounding_report')
       expect(result).toHaveProperty('action')
+      // Without grounding evaluator, report is null
+      expect(result.grounding_report).toBeNull()
     })
 
     it('identity_score reflects what evaluator returned', async () => {

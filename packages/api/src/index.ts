@@ -52,6 +52,7 @@ import { SideEffectProcessor } from '../../performance/src/side-effect-processor
 import { IdentityEvaluator } from '../../evaluation/src/identity-evaluator.js'
 import { VoiceAnalyzer } from '../../evaluation/src/voice-analyzer.js'
 import { HealthAggregator } from '../../evaluation/src/health-aggregator.js'
+import { GroundingEvaluator } from '../../evaluation/src/grounding-evaluator.js'
 
 // Routes
 import { registerEntityRoutes } from './routes/entities.js'
@@ -125,7 +126,8 @@ async function main() {
   const generator = new Generator(llm)
   const identityEvaluator = new IdentityEvaluator(llm)
   const voiceAnalyzer = new VoiceAnalyzer(llm)
-  const performanceEvaluator = new PerformanceEvaluator(guardrailEnforcer, identityEvaluator, voiceAnalyzer)
+  const groundingEvaluator = new GroundingEvaluator(llm, memoryRetriever, memoryManager)
+  const performanceEvaluator = new PerformanceEvaluator(guardrailEnforcer, identityEvaluator, voiceAnalyzer, groundingEvaluator)
   const publisher = new Publisher(storage.performanceLog)
   const sideEffectProcessor = new SideEffectProcessor(memoryManager, moodController)
   const healthAggregator = new HealthAggregator(storage.performanceLog)

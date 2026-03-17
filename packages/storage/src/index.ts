@@ -4,6 +4,7 @@ import Database from 'better-sqlite3'
 import { SQLiteDocumentStore } from './document-store.js'
 import { createVectorStore } from './vector-store.js'
 import { SQLitePerformanceLog } from './performance-log.js'
+import { SQLiteFTSIndex } from './fts-index.js'
 
 export interface IDocumentStore {
   put(collection: string, id: string, doc: Record<string, any>): void
@@ -48,10 +49,24 @@ export interface IPerformanceLog {
   query(filter: { entityId?: string; after?: string; before?: string; minScore?: number }): PerformanceLogEntry[]
 }
 
+export interface FTSResult {
+  id: string
+  snippet: string
+  score: number
+}
+
+export interface IFTSIndex {
+  index(id: string, entityId: string, content: string): void
+  indexBatch(entries: Array<{ id: string; entityId: string; content: string }>): void
+  search(entityId: string, query: string, limit?: number): FTSResult[]
+  remove(id: string): void
+}
+
 export interface Storage {
   documents: IDocumentStore
   vectors: IVectorStore
   performanceLog: IPerformanceLog
+  fts: IFTSIndex
 }
 
 export async function createStorage(config?: { dataDir?: string }): Promise<Storage> {
@@ -65,10 +80,12 @@ export async function createStorage(config?: { dataDir?: string }): Promise<Stor
   const documents = new SQLiteDocumentStore(db)
   const vectors = await createVectorStore(join(dataDir, 'vectors'))
   const performanceLog = new SQLitePerformanceLog(db)
+  const fts = new SQLiteFTSIndex(db)
 
-  return { documents, vectors, performanceLog }
+  return { documents, vectors, performanceLog, fts }
 }
 
 export { SQLiteDocumentStore } from './document-store.js'
-export { InMemoryVectorStore, createVectorStore } from './vector-store.js'
+export { InMemoryVectorStore, LanceDBVectorStore, HybridVectorStore, createVectorStore } from './vector-store.js'
 export { SQLitePerformanceLog } from './performance-log.js'
+export { SQLiteFTSIndex } from './fts-index.js'

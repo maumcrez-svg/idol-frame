@@ -9,6 +9,7 @@ export const EpisodicEntrySchema = z.object({
   timestamp: z.string(),
   embedding: z.array(z.number()).nullable().default(null),
   decay_rate: z.number().min(0).max(1).default(0.01),
+  consolidated: z.boolean().default(false),
 })
 
 export const MemoryQuerySchema = z.object({

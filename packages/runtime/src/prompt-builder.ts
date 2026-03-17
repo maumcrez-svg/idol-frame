@@ -217,18 +217,69 @@ function buildModeBlock(mode: PerformanceMode): string {
   }
 }
 
+interface EnrichedMemoryResult extends MemoryResult {
+  source?: 'fresh_tail' | 'vector' | 'fts' | 'consolidated'
+}
+
 function buildMemoryBlock(memories: MemoryResult[]): string {
   if (memories.length === 0) {
     return 'No prior memory. This is a fresh start. Establish your voice from scratch.'
   }
 
-  const sorted = [...memories].sort((a, b) => b.score - a.score)
+  // Check if we have enriched results with source markers
+  const enriched = memories as EnrichedMemoryResult[]
+  const hasSourceMarkers = enriched.some(m => m.source !== undefined)
+
+  if (!hasSourceMarkers) {
+    // Backward compat: flat list (old MemoryResult without source)
+    const sorted = [...memories].sort((a, b) => b.score - a.score)
+    const lines: string[] = []
+    lines.push('CONTINUITY MEMORY (use these to stay consistent and build on past performances):')
+    for (const m of sorted) {
+      lines.push(`- [${importanceLevel(m.entry.importance)}] ${sanitizeForPrompt(m.entry.content)}`)
+      lines.push(`  Context: ${sanitizeForPrompt(m.entry.context)}`)
+    }
+    return lines.join('\n')
+  }
+
+  // Split into sections by source
+  const recent = enriched.filter(m => m.source === 'fresh_tail')
+  const consolidated = enriched.filter(m => m.source === 'consolidated')
+  const retrieved = enriched.filter(m => m.source === 'vector' || m.source === 'fts')
+
   const lines: string[] = []
 
-  lines.push('CONTINUITY MEMORY (use these to stay consistent and build on past performances):')
-  for (const m of sorted) {
-    lines.push(`- [${importanceLevel(m.entry.importance)}] ${sanitizeForPrompt(m.entry.content)}`)
-    lines.push(`  Context: ${sanitizeForPrompt(m.entry.context)}`)
+  if (recent.length > 0) {
+    lines.push('RECENT MEMORY (verbatim — your most recent experiences):')
+    for (const m of recent) {
+      lines.push(`- ${sanitizeForPrompt(m.entry.content)}`)
+      if (m.entry.context) {
+        lines.push(`  Context: ${sanitizeForPrompt(m.entry.context)}`)
+      }
+    }
+  }
+
+  if (consolidated.length > 0) {
+    if (lines.length > 0) lines.push('')
+    lines.push('CONSOLIDATED MEMORY (summaries of older experiences):')
+    for (const m of consolidated) {
+      lines.push(`- [${importanceLevel(m.entry.importance)}] ${sanitizeForPrompt(m.entry.content)}`)
+    }
+  }
+
+  if (retrieved.length > 0) {
+    if (lines.length > 0) lines.push('')
+    lines.push('RELEVANT MEMORY (retrieved by relevance):')
+    for (const m of retrieved) {
+      lines.push(`- [${importanceLevel(m.entry.importance)}] ${sanitizeForPrompt(m.entry.content)}`)
+      if (m.entry.context) {
+        lines.push(`  Context: ${sanitizeForPrompt(m.entry.context)}`)
+      }
+    }
+  }
+
+  if (lines.length === 0) {
+    return 'No prior memory. This is a fresh start. Establish your voice from scratch.'
   }
 
   return lines.join('\n')

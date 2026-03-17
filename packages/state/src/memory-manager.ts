@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid'
-import type { IDocumentStore, IVectorStore } from '../../storage/src/index.js'
+import type { IDocumentStore, IVectorStore, IFTSIndex } from '../../storage/src/index.js'
 import type { EpisodicEntry } from '../../schema/src/index.js'
 import { EpisodicEntrySchema } from '../../schema/src/index.js'
 import type { LLMProvider } from '../../llm/src/index.js'
@@ -8,11 +8,16 @@ const COLLECTION = 'episodic_memory'
 const VECTOR_COLLECTION = 'memory_vectors'
 
 export class MemoryManager {
+  private fts?: IFTSIndex
+
   constructor(
     private docs: IDocumentStore,
     private vectors: IVectorStore,
     private llm: LLMProvider,
-  ) {}
+    fts?: IFTSIndex,
+  ) {
+    this.fts = fts
+  }
 
   async store(input: {
     entity_id: string
@@ -52,6 +57,10 @@ export class MemoryManager {
       })
     }
 
+    if (this.fts) {
+      this.fts.index(entry.id, entry.entity_id, entry.content)
+    }
+
     return entry
   }
 
@@ -65,5 +74,19 @@ export class MemoryManager {
   get(id: string): EpisodicEntry | null {
     const doc = this.docs.get(COLLECTION, id)
     return doc ? EpisodicEntrySchema.parse(doc) : null
+  }
+
+  markConsolidated(id: string): void {
+    this.docs.update(COLLECTION, id, { consolidated: true })
+  }
+
+  getUnconsolidated(entityId: string, excludeRecentCount = 20): EpisodicEntry[] {
+    const all = this.docs.list(COLLECTION, { entity_id: entityId })
+      .map(d => EpisodicEntrySchema.parse(d))
+      .filter(e => !e.consolidated)
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+
+    // Exclude the most recent N entries (fresh tail)
+    return all.slice(excludeRecentCount)
   }
 }

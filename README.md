@@ -12,7 +12,8 @@ Not a chatbot builder. Not a prompt template. A persistent identity runtime with
 - **Hybrid retrieval** — Vector similarity + FTS5 keyword search + importance + recency scoring. Fresh tail (last N entries) always included verbatim. Grep for exact keyword lookup.
 - **Cross-time drift tracking** — Full time-series history of every trait change. Query value-at-time, velocity, direction, and trajectory for visualization.
 - **Hybrid vector store** — InMemory hot path for sub-ms reads/writes, LanceDB cold persistence via batch flush. Zero overhead on hot path with crash recovery.
-- **Quantitative evaluation** — Identity consistency (ICS) and voice consistency (VCS) scored on every output. Not vibes.
+- **Anti-hallucination grounding** — Every output is fact-checked against stored memories. Claims are extracted, cross-referenced via vector + keyword search, and classified: grounded, novel, ungrounded, or contradicted. Contradictions are zero-tolerance — output is rejected and regenerated. Every grounded claim links to its source memory ID. Enterprise-grade auditability.
+- **Quantitative evaluation** — Identity consistency (ICS), voice consistency (VCS), and grounding score (GRS) scored on every output. Not vibes.
 - **Guardrails** — Block, Warn, or Flag outputs that break character. Evaluated before publish.
 - **Snapshot/rollback** — Capture full entity state. Restore any version. SHA-256 verified.
 - **Model-agnostic** — Works with OpenAI, Anthropic, or any LLM behind the provider interface.
@@ -83,7 +84,7 @@ curl -X POST http://localhost:3000/v1/entities/e-{id}/perform \
   }'
 ```
 
-The response includes the generated content, evaluation scores (identity, voice, quality), and continuity notes extracted for memory.
+The response includes the generated content, evaluation scores (identity, voice, grounding, quality), citations linking claims to source memories, and continuity notes extracted for memory.
 
 ## Direct the entity
 
@@ -158,6 +159,23 @@ curl http://localhost:3000/v1/entities/e-{id}/traits/confidence/trajectory?point
 curl "http://localhost:3000/v1/entities/e-{id}/traits/confidence/value-at?timestamp=2026-03-10T00:00:00Z"
 ```
 
+## Evaluation pipeline
+
+Every output passes through 4 evaluators before publish:
+
+```
+Output → Guardrails → Identity Score → Voice Score → Grounding Check → Publish/Regenerate/Block
+```
+
+1. **Guardrail enforcer** — Heuristic + LLM checks for safety, brand, and creator-defined rules
+2. **Identity evaluator** — Value alignment, worldview consistency, recognition markers, tension balance (0.35/0.20/0.30/0.15 weighted)
+3. **Voice analyzer** — Vocabulary, syntax, rhetoric, emotional register (0.25 each, hybrid heuristic + LLM)
+4. **Grounding evaluator** — Extracts claims, cross-references against memory, flags contradictions
+
+Quality score with grounding: `0.30*identity + 0.20*voice + 0.25*guardrails + 0.25*grounding`
+
+Contradictions trigger automatic regeneration (up to 3 attempts, then block). Citations link every grounded claim to its source memory ID for audit.
+
 ## API
 
 56 endpoints. Key groups:
@@ -177,7 +195,7 @@ curl "http://localhost:3000/v1/entities/e-{id}/traits/confidence/value-at?timest
 | Drift History | history + velocity + trajectory | Time-series trait tracking |
 | Memory | search + grep + consolidate + expand | DAG memory with hybrid retrieval |
 | Snapshots | Capture + restore | Full state backup with checksum |
-| Performances | Perform + history + health | The 11-step generation pipeline |
+| Performances | Perform + history + health | Generation pipeline with grounding |
 | Stages | CRUD | Platform/format definitions |
 
 Every response follows the envelope: `{ data, meta: { request_id, timestamp, version }, errors }`.
@@ -186,22 +204,22 @@ Every response follows the envelope: `{ data, meta: { request_id, timestamp, ver
 
 ```
 Creator → Directives/Arcs → Idol Frame → LLM → Evaluated Output
-                                ↕
-              Memory (DAG) / Mood / Drift / Eval / Snapshot
-                                ↕
-                  InMemory (hot) ⇄ LanceDB (cold)
+                                ↕                      ↕
+              Memory (DAG) / Mood / Drift / Snapshot   Grounding Check
+                                ↕                      ↕
+                  InMemory (hot) ⇄ LanceDB (cold)   Citations
 ```
 
 12 packages: schema, storage, llm, identity, state, cognition, runtime, performance, evaluation, evolution, api, benchmarks.
 
-22 primitives: Entity, IdentityCore, Voice, Trait, Aesthetic, Lore, Guardrail, Memory, MemoryNode, DriftEvent, Mood, Arc, Directive, Epoch, DriftRule, Relationship, DecisionFrame, Performance, Stage, Snapshot, + evaluation types.
+23 primitives: Entity, IdentityCore, Voice, Trait, Aesthetic, Lore, Guardrail, Memory, MemoryNode, DriftEvent, GroundingReport, Mood, Arc, Directive, Epoch, DriftRule, Relationship, DecisionFrame, Performance, Stage, Snapshot, + evaluation types.
 
 12 invariants enforced at runtime: identity immutability, trait bounds, guardrail supremacy, snapshot checksums, mood transience, single active arc/epoch, directive-guardrail compatibility.
 
 ## Tests
 
 ```bash
-npm test        # 323 tests
+npm test        # 354 tests
 npm run bench:memory  # latency benchmarks at 100/1k/10k scale
 ```
 
@@ -209,7 +227,7 @@ npm run bench:memory  # latency benchmarks at 100/1k/10k scale
 
 Framework designed and architected by a human. Entire codebase implemented with [Claude Code]
 
-100+ source files, ~15K LOC, 56 API endpoints, 12 enforced invariants. Zero manual code written.
+109 source files, ~16.4K LOC, 56 API endpoints, 12 enforced invariants. Zero manual code written.
 
 This is what happens when you pair strong design thinking with the right tools.
 

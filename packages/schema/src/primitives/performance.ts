@@ -5,8 +5,14 @@ export const PerformanceModeSchema = z.enum(['live_host', 'short_video', 'editor
 export const EvaluationResultSchema = z.object({
   identity_score: z.number().min(0).max(1),
   voice_score: z.number().min(0).max(1),
+  grounding_score: z.number().min(0).max(1).nullable().default(null),
   guardrail_passed: z.boolean(),
   guardrail_violations: z.array(z.string()).default([]),
+  grounding_citations: z.array(z.object({
+    claim: z.string(),
+    memory_id: z.string(),
+    verdict: z.string(),
+  })).default([]),
   quality_score: z.number().min(0).max(1),
   details: z.record(z.string(), z.any()).default({}),
 })

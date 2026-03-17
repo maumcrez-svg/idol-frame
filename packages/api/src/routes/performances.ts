@@ -95,12 +95,19 @@ export function registerPerformanceRoutes(app: FastifyInstance, deps: Performanc
           evaluation: {
             identity_score: evaluation.identity_score.overall,
             voice_score: evaluation.voice_score.overall,
+            grounding_score: evaluation.grounding_report?.score ?? null,
             guardrail_passed: evaluation.guardrail_result.passed,
             guardrail_violations: evaluation.guardrail_result.violations.map(v => v.reason),
+            grounding_citations: evaluation.grounding_report?.citations.map(c => ({
+              claim: c.claim_text,
+              memory_id: c.memory_id,
+              verdict: 'grounded',
+            })) ?? [],
             quality_score: evaluation.quality_score,
             details: {
               identity: evaluation.identity_score,
               voice: evaluation.voice_score,
+              grounding: evaluation.grounding_report,
             },
           },
           continuity_notes: [],

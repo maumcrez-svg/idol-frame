@@ -159,7 +159,7 @@ npm test
 
 ## Built with
 
-Framework designed and architected by a human. Entire codebase implemented with [Claude Code](https://claude.ai/claude-code) (Claude Opus 4.6, 1M context) in a single session — from design docs to 234 passing tests.
+Framework designed and architected by a human. Entire codebase implemented with [Claude Code]
 
 80 source files, ~11K LOC, 47 API endpoints, 12 enforced invariants. Zero manual code written.
 

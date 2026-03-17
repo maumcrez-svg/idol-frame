@@ -13,7 +13,7 @@ import { envelopeMiddleware } from './middleware/envelope.js'
 import { createErrorHandler } from './middleware/error-handler.js'
 
 // Storage
-import { createStorage } from '../../storage/src/index.js'
+import { createStorage, type HybridVectorStore } from '../../storage/src/index.js'
 
 // LLM
 import { createProvider } from '../../llm/src/index.js'
@@ -29,9 +29,11 @@ import { SnapshotManager } from '../../identity/src/snapshot-manager.js'
 
 // State
 import { MemoryManager } from '../../state/src/memory-manager.js'
+import { MemoryConsolidator } from '../../state/src/memory-consolidator.js'
 import { MoodController } from '../../state/src/mood-controller.js'
 import { ArcDirector } from '../../state/src/arc-director.js'
 import { DriftEngine } from '../../state/src/drift-engine.js'
+import { DriftTracker } from '../../state/src/drift-tracker.js'
 import { EpochManager } from '../../state/src/epoch-manager.js'
 
 // Cognition
@@ -64,6 +66,8 @@ import { registerDirectiveRoutes } from './routes/directives.js'
 import { registerArcRoutes } from './routes/arcs.js'
 import { registerDriftRuleRoutes } from './routes/drift-rules.js'
 import { registerEpochRoutes } from './routes/epochs.js'
+import { registerMemoryRoutes } from './routes/memory.js'
+import { registerDriftHistoryRoutes } from './routes/drift-history.js'
 
 // Schema
 import type { Stage } from '../../schema/src/index.js'
@@ -73,6 +77,13 @@ async function main() {
 
   // --- Initialize storage ---
   const storage = await createStorage({ dataDir: config.dataDir })
+
+  // --- Warm hybrid vector store from LanceDB persistence ---
+  const hybridVectors = storage.vectors as HybridVectorStore
+  if (hybridVectors.warmFromCold) {
+    const loaded = await hybridVectors.warmFromCold(['memory_vectors'])
+    console.log(`Warmed vector store: ${loaded} vectors loaded from LanceDB`)
+  }
 
   // --- Initialize LLM ---
   const llm = createProvider()
@@ -90,14 +101,19 @@ async function main() {
   )
 
   // --- Initialize state subsystem ---
-  const memoryManager = new MemoryManager(storage.documents, storage.vectors, llm)
+  const memoryManager = new MemoryManager(storage.documents, storage.vectors, llm, storage.fts)
   const moodController = new MoodController(storage.documents)
   const arcDirector = new ArcDirector(storage.documents, snapshotManager)
-  const driftEngine = new DriftEngine(storage.documents, traitEngine)
+  const driftTracker = new DriftTracker(storage.documents)
   const epochManager = new EpochManager(storage.documents)
+  const driftEngine = new DriftEngine(storage.documents, traitEngine, driftTracker, epochManager)
+
+  // --- Initialize consolidation ---
+  const memoryConsolidator = new MemoryConsolidator(storage.documents, storage.vectors, llm, memoryManager)
 
   // --- Initialize cognition subsystem ---
-  const memoryRetriever = new MemoryRetriever(storage.vectors, memoryManager, llm)
+  const memoryRetriever = new MemoryRetriever(storage.vectors, memoryManager, llm, storage.fts)
+  memoryRetriever.setConsolidator(memoryConsolidator)
   const guardrailEnforcer = new GuardrailEnforcer(llm)
   const directiveResolver = new DirectiveResolver(storage.documents)
   const frameAssembler = new FrameAssembler(
@@ -176,6 +192,8 @@ async function main() {
   registerArcRoutes(app, { arcDirector, entityStore })
   registerDriftRuleRoutes(app, { driftEngine, entityStore })
   registerEpochRoutes(app, { epochManager, entityStore })
+  registerMemoryRoutes(app, { entityStore, memoryRetriever, memoryConsolidator, vectors: storage.vectors })
+  registerDriftHistoryRoutes(app, { driftTracker, entityStore })
 
   // --- System routes ---
   app.get('/health', async () => {
@@ -212,9 +230,25 @@ async function main() {
     errors: [],
   }))
 
+  // --- Periodic flush: write dirty vectors to LanceDB every 60s ---
+  const flushInterval = setInterval(async () => {
+    if (hybridVectors.flush && hybridVectors.pendingCount > 0) {
+      const { upserted, deleted } = await hybridVectors.flush()
+      if (upserted > 0 || deleted > 0) {
+        app.log.info(`Vector flush: ${upserted} upserted, ${deleted} deleted`)
+      }
+    }
+  }, 60_000)
+
   // --- Graceful shutdown ---
   const shutdown = async (signal: string) => {
     app.log.info(`Received ${signal}, shutting down...`)
+    clearInterval(flushInterval)
+    // Final flush before exit
+    if (hybridVectors.flush && hybridVectors.pendingCount > 0) {
+      app.log.info('Final vector flush...')
+      await hybridVectors.flush()
+    }
     await app.close()
     process.exit(0)
   }

@@ -1,5 +1,8 @@
 export { MemoryManager } from './memory-manager.js'
+export { MemoryConsolidator } from './memory-consolidator.js'
+export type { ConsolidatorConfig } from './memory-consolidator.js'
 export { MoodController } from './mood-controller.js'
 export { ArcDirector } from './arc-director.js'
 export { DriftEngine } from './drift-engine.js'
+export { DriftTracker } from './drift-tracker.js'
 export { EpochManager } from './epoch-manager.js'

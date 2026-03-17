@@ -3,6 +3,8 @@ import type { IDocumentStore } from '../../storage/src/index.js'
 import type { DriftRule, DriftDirection } from '../../schema/src/index.js'
 import { DriftRuleSchema } from '../../schema/src/index.js'
 import type { TraitEngine } from '../../identity/src/trait-engine.js'
+import type { DriftTracker } from './drift-tracker.js'
+import type { EpochManager } from './epoch-manager.js'
 
 const COLLECTION = 'drift_rules'
 
@@ -10,6 +12,8 @@ export class DriftEngine {
   constructor(
     private docs: IDocumentStore,
     private traitEngine: TraitEngine,
+    private tracker?: DriftTracker,
+    private epochManager?: EpochManager,
   ) {}
 
   create(input: {
@@ -107,6 +111,22 @@ export class DriftEngine {
           new_value: newValue,
           rule_id: rule.id,
         })
+
+        // Record drift event for cross-time tracking
+        if (this.tracker) {
+          const epochId = this.epochManager
+            ? this.epochManager.getActive(entityId)?.id ?? null
+            : null
+          this.tracker.record({
+            entity_id: entityId,
+            trait_name: rule.trait_name,
+            old_value: oldValue,
+            new_value: newValue,
+            delta: newValue - oldValue,
+            rule_id: rule.id,
+            epoch_id: epochId,
+          })
+        }
       }
 
       // Update last_applied

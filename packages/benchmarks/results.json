@@ -1,0 +1,221 @@
+{
+  "timestamp": "2026-03-17T07:12:08.674Z",
+  "node_version": "v20.19.5",
+  "scales": [
+    100,
+    1000,
+    10000
+  ],
+  "results": [
+    {
+      "operation": "retrieve (hybrid)",
+      "scale": 100,
+      "runs": 10,
+      "avg_ms": 2.28,
+      "min_ms": 1.65,
+      "max_ms": 3.13,
+      "p50_ms": 2.46,
+      "p95_ms": 3.13
+    },
+    {
+      "operation": "retrieve (vector-only)",
+      "scale": 100,
+      "runs": 10,
+      "avg_ms": 1.59,
+      "min_ms": 1.26,
+      "max_ms": 2.55,
+      "p50_ms": 1.45,
+      "p95_ms": 2.55
+    },
+    {
+      "operation": "grep (FTS5)",
+      "scale": 100,
+      "runs": 10,
+      "avg_ms": 0.27,
+      "min_ms": 0.2,
+      "max_ms": 0.44,
+      "p50_ms": 0.24,
+      "p95_ms": 0.44
+    },
+    {
+      "operation": "consolidate",
+      "scale": 100,
+      "runs": 3,
+      "avg_ms": 1.99,
+      "min_ms": 1.49,
+      "max_ms": 2.24,
+      "p50_ms": 2.23,
+      "p95_ms": 2.24
+    },
+    {
+      "operation": "getNodes",
+      "scale": 100,
+      "runs": 10,
+      "avg_ms": 0.3,
+      "min_ms": 0.22,
+      "max_ms": 0.44,
+      "p50_ms": 0.29,
+      "p95_ms": 0.44
+    },
+    {
+      "operation": "expand",
+      "scale": 100,
+      "runs": 10,
+      "avg_ms": 0.14,
+      "min_ms": 0.11,
+      "max_ms": 0.18,
+      "p50_ms": 0.13,
+      "p95_ms": 0.18
+    },
+    {
+      "operation": "store (single)",
+      "scale": 100,
+      "runs": 10,
+      "avg_ms": 0.08,
+      "min_ms": 0.07,
+      "max_ms": 0.12,
+      "p50_ms": 0.08,
+      "p95_ms": 0.12
+    },
+    {
+      "operation": "retrieve (hybrid)",
+      "scale": 1000,
+      "runs": 10,
+      "avg_ms": 12.79,
+      "min_ms": 11.13,
+      "max_ms": 16.43,
+      "p50_ms": 11.98,
+      "p95_ms": 16.43
+    },
+    {
+      "operation": "retrieve (vector-only)",
+      "scale": 1000,
+      "runs": 10,
+      "avg_ms": 12.05,
+      "min_ms": 10.95,
+      "max_ms": 13.3,
+      "p50_ms": 12.39,
+      "p95_ms": 13.3
+    },
+    {
+      "operation": "grep (FTS5)",
+      "scale": 1000,
+      "runs": 10,
+      "avg_ms": 0.6,
+      "min_ms": 0.43,
+      "max_ms": 0.73,
+      "p50_ms": 0.62,
+      "p95_ms": 0.73
+    },
+    {
+      "operation": "consolidate",
+      "scale": 1000,
+      "runs": 3,
+      "avg_ms": 10.62,
+      "min_ms": 9.74,
+      "max_ms": 11.33,
+      "p50_ms": 10.79,
+      "p95_ms": 11.33
+    },
+    {
+      "operation": "getNodes",
+      "scale": 1000,
+      "runs": 10,
+      "avg_ms": 2.16,
+      "min_ms": 1.94,
+      "max_ms": 2.46,
+      "p50_ms": 2.19,
+      "p95_ms": 2.46
+    },
+    {
+      "operation": "expand",
+      "scale": 1000,
+      "runs": 10,
+      "avg_ms": 0.14,
+      "min_ms": 0.09,
+      "max_ms": 0.18,
+      "p50_ms": 0.14,
+      "p95_ms": 0.18
+    },
+    {
+      "operation": "store (single)",
+      "scale": 1000,
+      "runs": 10,
+      "avg_ms": 0.19,
+      "min_ms": 0.13,
+      "max_ms": 0.36,
+      "p50_ms": 0.16,
+      "p95_ms": 0.36
+    },
+    {
+      "operation": "retrieve (hybrid)",
+      "scale": 10000,
+      "runs": 5,
+      "avg_ms": 136.84,
+      "min_ms": 130.91,
+      "max_ms": 144.77,
+      "p50_ms": 136.15,
+      "p95_ms": 144.77
+    },
+    {
+      "operation": "retrieve (vector-only)",
+      "scale": 10000,
+      "runs": 5,
+      "avg_ms": 141.41,
+      "min_ms": 131.81,
+      "max_ms": 160.04,
+      "p50_ms": 138.71,
+      "p95_ms": 160.04
+    },
+    {
+      "operation": "grep (FTS5)",
+      "scale": 10000,
+      "runs": 5,
+      "avg_ms": 1.25,
+      "min_ms": 0.94,
+      "max_ms": 2.35,
+      "p50_ms": 0.98,
+      "p95_ms": 2.35
+    },
+    {
+      "operation": "consolidate",
+      "scale": 10000,
+      "runs": 3,
+      "avg_ms": 133.4,
+      "min_ms": 129.84,
+      "max_ms": 138.37,
+      "p50_ms": 131.97,
+      "p95_ms": 138.37
+    },
+    {
+      "operation": "getNodes",
+      "scale": 10000,
+      "runs": 5,
+      "avg_ms": 26.55,
+      "min_ms": 24.49,
+      "max_ms": 27.32,
+      "p50_ms": 27.15,
+      "p95_ms": 27.32
+    },
+    {
+      "operation": "expand",
+      "scale": 10000,
+      "runs": 5,
+      "avg_ms": 0.1,
+      "min_ms": 0.09,
+      "max_ms": 0.1,
+      "p50_ms": 0.1,
+      "p95_ms": 0.1
+    },
+    {
+      "operation": "store (single)",
+      "scale": 10000,
+      "runs": 5,
+      "avg_ms": 1.21,
+      "min_ms": 0.98,
+      "max_ms": 1.28,
+      "p50_ms": 1.25,
+      "p95_ms": 1.28
+    }
+  ]
+}

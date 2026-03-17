@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc -b",
     "test": "vitest",
-    "dev": "tsx packages/api/src/index.ts"
+    "dev": "tsx packages/api/src/index.ts",
+    "bench:memory": "tsx packages/benchmarks/run.ts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.8",

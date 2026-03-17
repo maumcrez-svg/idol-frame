@@ -8,6 +8,10 @@ Not a chatbot builder. Not a prompt template. A persistent identity runtime with
 
 - **Persistent identity** — Entity personality survives across sessions. No reset. No drift.
 - **Directed evolution** — Arcs, moods, directives, epochs. The entity changes when the creator says, not by entropy.
+- **DAG memory consolidation** — Hierarchical summarization (episodic → leaf → condensed) that compresses old memories without losing facts. Importance-aware: critical memories resist compression 2x longer. Expand any summary back to its original entries.
+- **Hybrid retrieval** — Vector similarity + FTS5 keyword search + importance + recency scoring. Fresh tail (last N entries) always included verbatim. Grep for exact keyword lookup.
+- **Cross-time drift tracking** — Full time-series history of every trait change. Query value-at-time, velocity, direction, and trajectory for visualization.
+- **Hybrid vector store** — InMemory hot path for sub-ms reads/writes, LanceDB cold persistence via batch flush. Zero overhead on hot path with crash recovery.
 - **Quantitative evaluation** — Identity consistency (ICS) and voice consistency (VCS) scored on every output. Not vibes.
 - **Guardrails** — Block, Warn, or Flag outputs that break character. Evaluated before publish.
 - **Snapshot/rollback** — Capture full entity state. Restore any version. SHA-256 verified.
@@ -115,9 +119,48 @@ curl -X POST http://localhost:3000/v1/entities/e-{id}/arcs \
   }'
 ```
 
+## Memory system
+
+```bash
+# Semantic search across memories
+curl -X POST http://localhost:3000/v1/entities/e-{id}/memory/search \
+  -H "Content-Type: application/json" \
+  -d '{ "query": "what did I say about SOL", "top_k": 10 }'
+
+# Keyword search (FTS5)
+curl -X POST http://localhost:3000/v1/entities/e-{id}/memory/grep \
+  -H "Content-Type: application/json" \
+  -d '{ "keyword": "bullish", "limit": 20 }'
+
+# Trigger consolidation (compress old memories into summaries)
+curl -X POST http://localhost:3000/v1/entities/e-{id}/memory/consolidate
+
+# List summary nodes by level
+curl http://localhost:3000/v1/entities/e-{id}/memory/nodes?level=1
+
+# Expand a summary back to original entries
+curl http://localhost:3000/v1/memory/nodes/mn-{id}/expand
+```
+
+## Drift tracking
+
+```bash
+# Trait change history
+curl http://localhost:3000/v1/entities/e-{id}/traits/confidence/history?limit=50
+
+# Current drift velocity and direction
+curl http://localhost:3000/v1/entities/e-{id}/traits/confidence/velocity?window_hours=168
+
+# Trajectory for visualization (evenly sampled points)
+curl http://localhost:3000/v1/entities/e-{id}/traits/confidence/trajectory?points=20
+
+# Value at a specific point in time
+curl "http://localhost:3000/v1/entities/e-{id}/traits/confidence/value-at?timestamp=2026-03-10T00:00:00Z"
+```
+
 ## API
 
-47 endpoints. Key groups:
+56 endpoints. Key groups:
 
 | Group | Endpoints | Purpose |
 |-------|-----------|---------|
@@ -131,6 +174,8 @@ curl -X POST http://localhost:3000/v1/entities/e-{id}/arcs \
 | Arcs | CRUD + lifecycle | Narrative trajectories with phases |
 | Epochs | CRUD + transition | Eras of entity life |
 | Drift Rules | CRUD + apply | Trait evolution over time |
+| Drift History | history + velocity + trajectory | Time-series trait tracking |
+| Memory | search + grep + consolidate + expand | DAG memory with hybrid retrieval |
 | Snapshots | Capture + restore | Full state backup with checksum |
 | Performances | Perform + history + health | The 11-step generation pipeline |
 | Stages | CRUD | Platform/format definitions |
@@ -142,26 +187,29 @@ Every response follows the envelope: `{ data, meta: { request_id, timestamp, ver
 ```
 Creator → Directives/Arcs → Idol Frame → LLM → Evaluated Output
                                 ↕
-                    Memory / Mood / Eval / Snapshot
+              Memory (DAG) / Mood / Drift / Eval / Snapshot
+                                ↕
+                  InMemory (hot) ⇄ LanceDB (cold)
 ```
 
-12 packages: schema, storage, llm, identity, state, cognition, runtime, performance, evaluation, evolution, api.
+12 packages: schema, storage, llm, identity, state, cognition, runtime, performance, evaluation, evolution, api, benchmarks.
 
-20 primitives: Entity, IdentityCore, Voice, Trait, Aesthetic, Lore, Guardrail, Memory, Mood, Arc, Directive, Epoch, DriftRule, Relationship, DecisionFrame, Performance, Stage, Snapshot, + evaluation types.
+22 primitives: Entity, IdentityCore, Voice, Trait, Aesthetic, Lore, Guardrail, Memory, MemoryNode, DriftEvent, Mood, Arc, Directive, Epoch, DriftRule, Relationship, DecisionFrame, Performance, Stage, Snapshot, + evaluation types.
 
 12 invariants enforced at runtime: identity immutability, trait bounds, guardrail supremacy, snapshot checksums, mood transience, single active arc/epoch, directive-guardrail compatibility.
 
 ## Tests
 
 ```bash
-npm test
+npm test        # 323 tests
+npm run bench:memory  # latency benchmarks at 100/1k/10k scale
 ```
 
 ## Built with
 
 Framework designed and architected by a human. Entire codebase implemented with [Claude Code]
 
-80 source files, ~11K LOC, 47 API endpoints, 12 enforced invariants. Zero manual code written.
+100+ source files, ~15K LOC, 56 API endpoints, 12 enforced invariants. Zero manual code written.
 
 This is what happens when you pair strong design thinking with the right tools.
 

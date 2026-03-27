@@ -1,0 +1,2195 @@
+# =============================================================================
+# Idol Frame Entity Schema — Canonical YAML Definition
+# =============================================================================
+# Version:  1.0.0
+# Date:     2026-03-15
+# Status:   NORMATIVE
+# Authority: Conforms to Part 3: Framework Primitives (03-framework-primitives.md)
+#
+# This file defines the complete entity schema as a validatable structure.
+# Every field traces to a primitive type signature in Part 3.
+# Field annotations use JSON Schema-compatible constraints.
+# =============================================================================
+
+schema_version: "1.0.0"
+schema_id: "idol-frame-entity-schema"
+primitive_source: "03-framework-primitives.md v1.0.0"
+
+# =============================================================================
+# ID Prefix Registry
+# =============================================================================
+id_prefixes:
+  Entity: "e-"
+  IdentityCore: "ic-"
+  Voice: "v-"
+  Aesthetic: "a-"
+  Lore: "l-"
+  Memory: "mem-"
+  Mood: "mood-"
+  Arc: "arc-"
+  Relationship: "rel-"
+  Directive: "d-"
+  Guardrail: "g-"
+  DecisionFrame: "df-"
+  Performance: "perf-"
+  Stage: "stage-"
+  Adapter: "adapter-"
+  Epoch: "epoch-"
+  DriftRule: "drift-"
+  Snapshot: "snap-"
+  Campaign: "camp-"
+
+# =============================================================================
+# Shared Types
+# =============================================================================
+shared_types:
+
+  UUID:
+    type: string
+    format: uuid
+    description: "Globally unique identifier, immutable after creation."
+
+  SemVer:
+    type: string
+    pattern: "^\\d+\\.\\d+\\.\\d+$"
+    description: "Semantic version: MAJOR.MINOR.PATCH."
+
+  ISO8601:
+    type: string
+    format: date-time
+    description: "ISO 8601 datetime with timezone."
+
+  Duration:
+    type: string
+    pattern: "^\\d+[smhdw]$"
+    description: "Duration string. s=seconds, m=minutes, h=hours, d=days, w=weeks."
+
+  HexColor:
+    type: string
+    pattern: "^#[0-9a-fA-F]{6}$"
+
+  Float01:
+    type: number
+    minimum: 0.0
+    maximum: 1.0
+
+  FloatSigned:
+    type: number
+    minimum: -1.0
+    maximum: 1.0
+
+  SecretRef:
+    type: string
+    pattern: "^vault://.+"
+    description: "Reference to credential store. Never inline secrets."
+
+# =============================================================================
+# Primitive 1: Entity
+# =============================================================================
+Entity:
+  description: "Top-level persistent creative identity container. Root node."
+  fields:
+    id:
+      type: UUID
+      required: true
+      immutable: true
+      prefix: "e-"
+    version:
+      type: SemVer
+      required: true
+      description: "Incremented on IdentityCore/Voice changes (minor) or Trait/Lore/Guardrail changes (patch)."
+    status:
+      type: enum
+      values: [Active, Dormant, Archived]
+      required: true
+      default: Active
+    created_at:
+      type: ISO8601
+      required: true
+      immutable: true
+    updated_at:
+      type: ISO8601
+      required: true
+    identity_core:
+      type: IdentityCore
+      required: true
+      cardinality: "1:1"
+      description: "Exactly one, required. Entity without IdentityCore is invalid."
+    traits:
+      type: map
+      key_type: string
+      value_type: Trait
+      required: false
+      default: {}
+      cardinality: "1:N"
+      description: "Keyed by trait name (lowercase_snake_case)."
+    voice:
+      type: Voice
+      required: true
+      cardinality: "1:1"
+      description: "Exactly one, required."
+    aesthetic:
+      type: Aesthetic
+      required: true
+      cardinality: "1:1"
+      description: "Exactly one, required. Defaults to null-aesthetic if not specified."
+    lore:
+      type: list
+      item_type: Lore
+      required: false
+      default: []
+      cardinality: "1:N"
+      description: "Ordered by creation time."
+    memories:
+      type: MemoryStore
+      required: true
+      cardinality: "1:1"
+      description: "Starts empty on creation."
+    mood:
+      type: Mood
+      required: false
+      nullable: true
+      default: null
+      cardinality: "1:0..1"
+      description: "Null means neutral baseline."
+    arcs:
+      type: list
+      item_type: Arc
+      required: false
+      default: []
+      cardinality: "1:N"
+      constraint: "At most one Arc with status Active at any time."
+    relationships:
+      type: map
+      key_type: UUID
+      value_type: Relationship
+      required: false
+      default: {}
+      cardinality: "1:N"
+      description: "Keyed by target entity/user ID."
+    directives:
+      type: list
+      item_type: Directive
+      required: false
+      default: []
+      cardinality: "1:N"
+      description: "Ordered by priority descending."
+    guardrails:
+      type: list
+      item_type: Guardrail
+      required: true
+      min_items: 1
+      cardinality: "1:N"
+      description: "At least one (system-default Safety guardrail). All enforced simultaneously."
+    epochs:
+      type: list
+      item_type: Epoch
+      required: true
+      min_items: 1
+      cardinality: "1:N"
+      description: "Ordered chronologically. Exactly one with status Active."
+    snapshots:
+      type: list
+      item_type: Snapshot
+      required: false
+      default: []
+      cardinality: "1:N"
+      description: "Ordered by creation time."
+  invariants:
+    - "Entity completeness: active Entity must have exactly one IdentityCore, one Voice, one Aesthetic, at least one Guardrail."
+    - "Single active arc: at most one Arc with status Active."
+    - "Single active epoch: exactly one Epoch with status Active."
+
+# =============================================================================
+# Primitive 2: IdentityCore
+# =============================================================================
+IdentityCore:
+  description: "Immutable-per-version essence. Fingerprint of identity."
+  fields:
+    id:
+      type: UUID
+      required: true
+      immutable: true
+      prefix: "ic-"
+    entity_id:
+      type: UUID
+      required: true
+      immutable: true
+      description: "Parent Entity."
+    version:
+      type: SemVer
+      required: true
+      immutable: true
+      description: "Matches Entity version at creation."
+    values:
+      type: list
+      item_type: ValueEntry
+      required: true
+      min_items: 1
+      description: "Ranked by importance (weight descending)."
+    worldview:
+      type: WorldviewSpec
+      required: true
+    communication_philosophy:
+      type: string
+      required: true
+      description: "How the entity approaches communication."
+    core_tensions:
+      type: list
+      item_type: Tension
+      required: false
+      default: []
+      description: "Internal contradictions that create depth."
+    recognition_markers:
+      type: list
+      item_type: string
+      required: false
+      default: []
+      description: "Things people would say 'that's so [entity]' about."
+    created_at:
+      type: ISO8601
+      required: true
+      immutable: true
+  immutable: true
+  lifecycle: "Immutable once created. New IdentityCore requires Entity version increment."
+
+ValueEntry:
+  fields:
+    name:
+      type: string
+      required: true
+    weight:
+      type: Float01
+      required: true
+    expression:
+      type: string
+      required: true
+      description: "How this value manifests in behavior."
+
+WorldviewSpec:
+  fields:
+    orientation:
+      type: string
+      required: true
+      description: "Fundamental stance, e.g. 'cautiously optimistic'."
+    beliefs:
+      type: list
+      item_type: Belief
+      required: false
+      default: []
+    blind_spots:
+      type: list
+      item_type: string
+      required: false
+      default: []
+      description: "Acknowledged limitations in perspective."
+
+Belief:
+  fields:
+    claim:
+      type: string
+      required: true
+    confidence:
+      type: Float01
+      required: true
+
+Tension:
+  fields:
+    pole_a:
+      type: string
+      required: true
+    pole_b:
+      type: string
+      required: true
+    balance:
+      type: number
+      minimum: -1.0
+      maximum: 1.0
+      required: true
+      description: "-1.0 = pole_a dominant, 1.0 = pole_b dominant."
+    volatility:
+      type: Float01
+      required: true
+      description: "How easily balance shifts under pressure."
+
+# =============================================================================
+# Primitive 3: Trait
+# =============================================================================
+Trait:
+  description: "Named, typed, bounded, driftable personality dimension."
+  fields:
+    name:
+      type: string
+      required: true
+      pattern: "^[a-z][a-z0-9_]*$"
+      description: "Unique within Entity, lowercase_snake_case."
+    value:
+      type: Float01
+      required: true
+      description: "Current normalized value."
+    range:
+      type: tuple
+      item_type: number
+      length: 2
+      required: true
+      description: "[min, max] subset of [0, 1]. Value must be within range."
+    drift_rule:
+      type: DriftRule
+      required: false
+      nullable: true
+      default: null
+      description: "Null means static trait."
+    tags:
+      type: list
+      item_type: string
+      required: false
+      default: []
+      description: "Categorization, e.g. 'emotional', 'social', 'cognitive'."
+    affects:
+      type: list
+      item_type: string
+      required: false
+      default: []
+      description: "Which output dimensions this trait influences."
+    updated_at:
+      type: ISO8601
+      required: true
+  invariants:
+    - "value >= range[0] and value <= range[1]"
+    - "range[0] >= 0.0 and range[1] <= 1.0"
+    - "range[0] <= range[1]"
+
+# =============================================================================
+# Primitive 4: Voice
+# =============================================================================
+Voice:
+  description: "Linguistic signature. How the entity speaks, independent of content."
+  fields:
+    id:
+      type: UUID
+      required: true
+      immutable: true
+      prefix: "v-"
+    entity_id:
+      type: UUID
+      required: true
+      immutable: true
+    vocabulary:
+      type: VocabularySpec
+      required: true
+    syntax:
+      type: SyntaxSpec
+      required: true
+    rhetoric:
+      type: RhetoricSpec
+      required: true
+    emotional_register:
+      type: EmotionalRegisterSpec
+      required: true
+    sample_utterances:
+      type: list
+      item_type: SampleUtterance
+      required: true
+      min_items: 5
+      max_items: 20
+      description: "5-20 canonical examples."
+
+VocabularySpec:
+  fields:
+    preferred_terms:
+      type: map
+      key_type: string
+      value_type: string
+      required: false
+      default: {}
+      description: "term -> reason/context."
+    avoided_terms:
+      type: list
+      item_type: string
+      required: false
+      default: []
+    jargon_domains:
+      type: list
+      item_type: string
+      required: false
+      default: []
+    formality_level:
+      type: Float01
+      required: true
+      description: "0 = very casual, 1 = very formal."
+    profanity_stance:
+      type: enum
+      values: [None, Rare, Moderate, Frequent]
+      required: true
+
+SyntaxSpec:
+  fields:
+    avg_sentence_length:
+      type: range
+      item_type: integer
+      length: 2
+      required: true
+      description: "Target word count range [min, max]."
+    complexity_preference:
+      type: enum
+      values: [Simple, Compound, Complex, Mixed]
+      required: true
+    fragment_frequency:
+      type: Float01
+      required: true
+      description: "How often incomplete sentences are used."
+    list_preference:
+      type: enum
+      values: [Inline, Bulleted, Avoided]
+      required: true
+    paragraph_length:
+      type: range
+      item_type: integer
+      length: 2
+      required: true
+      description: "Target sentence count range [min, max]."
+
+RhetoricSpec:
+  fields:
+    primary_devices:
+      type: list
+      item_type: string
+      required: true
+      min_items: 1
+    avoided_devices:
+      type: list
+      item_type: string
+      required: false
+      default: []
+    argument_style:
+      type: string
+      required: true
+    humor_type:
+      type: string
+      required: false
+      nullable: true
+      default: null
+      description: "Null if entity does not use humor."
+
+EmotionalRegisterSpec:
+  fields:
+    baseline_intensity:
+      type: Float01
+      required: true
+    escalation_rate:
+      type: Float01
+      required: true
+    preferred_emotions:
+      type: list
+      item_type: string
+      required: false
+      default: []
+    suppressed_emotions:
+      type: list
+      item_type: string
+      required: false
+      default: []
+
+SampleUtterance:
+  fields:
+    text:
+      type: string
+      required: true
+    context:
+      type: string
+      required: true
+    mood:
+      type: string
+      required: true
+
+# =============================================================================
+# Primitive 5: Aesthetic
+# =============================================================================
+Aesthetic:
+  description: "Visual and stylistic identity for visual media."
+  fields:
+    id:
+      type: UUID
+      required: true
+      immutable: true
+      prefix: "a-"
+    entity_id:
+      type: UUID
+      required: true
+      immutable: true
+    color_palette:
+      type: ColorPalette
+      required: true
+    typography:
+      type: TypographySpec
+      required: false
+      nullable: true
+    visual_style:
+      type: VisualStyleSpec
+      required: true
+    fashion:
+      type: FashionSpec
+      required: false
+      nullable: true
+      description: "Null if entity has no embodied form."
+    composition:
+      type: CompositionSpec
+      required: true
+    references:
+      type: list
+      item_type: ReferenceImage
+      required: false
+      default: []
+      description: "Mood board: URIs + descriptions."
+
+ColorPalette:
+  fields:
+    primary:
+      type: list
+      item_type: HexColor
+      required: true
+      min_items: 2
+      max_items: 4
+    secondary:
+      type: list
+      item_type: HexColor
+      required: false
+      default: []
+      min_items: 0
+      max_items: 6
+    accent:
+      type: list
+      item_type: HexColor
+      required: false
+      default: []
+      min_items: 0
+      max_items: 3
+    mood_map:
+      type: map
+      key_type: string
+      value_type: list
+      required: false
+      default: {}
+      description: "mood name -> list of HexColors."
+    forbidden:
+      type: list
+      item_type: HexColor
+      required: false
+      default: []
+
+TypographySpec:
+  fields:
+    primary_font:
+      type: string
+      required: false
+    secondary_font:
+      type: string
+      required: false
+    display_font:
+      type: string
+      required: false
+    weight_preference:
+      type: string
+      required: false
+      description: "e.g. 'light', 'regular', 'bold'."
+    style_notes:
+      type: string
+      required: false
+
+FashionSpec:
+  fields:
+    silhouette:
+      type: string
+      required: false
+    material_preference:
+      type: list
+      item_type: string
+      required: false
+      default: []
+    color_adherence:
+      type: Float01
+      required: false
+      description: "How strictly fashion follows color_palette."
+    style_references:
+      type: list
+      item_type: string
+      required: false
+      default: []
+    era_influences:
+      type: list
+      item_type: string
+      required: false
+      default: []
+
+VisualStyleSpec:
+  fields:
+    era_influences:
+      type: list
+      item_type: string
+      required: false
+      default: []
+    texture_preference:
+      type: string
+      required: true
+    contrast_level:
+      type: Float01
+      required: true
+    saturation_bias:
+      type: FloatSigned
+      required: true
+      description: "-1 = desaturated, +1 = saturated."
+    noise_tolerance:
+      type: Float01
+      required: true
+      description: "Willingness to include visual noise/grain."
+
+CompositionSpec:
+  fields:
+    symmetry_preference:
+      type: Float01
+      required: true
+      description: "0 = asymmetric, 1 = symmetric."
+    density:
+      type: Float01
+      required: true
+      description: "0 = minimal, 1 = maximalist."
+    negative_space:
+      type: Float01
+      required: true
+    focal_strategy:
+      type: string
+      required: true
+      description: "e.g. 'center-dominant', 'rule-of-thirds', 'edge-tension'."
+
+ReferenceImage:
+  fields:
+    uri:
+      type: string
+      required: true
+    description:
+      type: string
+      required: true
+
+# =============================================================================
+# Primitive 6: Lore
+# =============================================================================
+Lore:
+  description: "Discrete unit of backstory/canon with provenance and confidence."
+  fields:
+    id:
+      type: UUID
+      required: true
+      immutable: true
+      prefix: "l-"
+    entity_id:
+      type: UUID
+      required: true
+      immutable: true
+    content:
+      type: string
+      required: true
+      description: "The fact itself, in plain language."
+    category:
+      type: enum
+      values: [Origin, Event, Preference, Belief, Relationship, Meta]
+      required: true
+    confidence:
+      type: Float01
+      required: true
+      description: "0 = speculative, 1 = hard canon."
+    source:
+      type: enum
+      values: [CreatorDefined, EntityGenerated, AudienceDerived]
+      required: true
+    approval:
+      type: enum
+      values: [Approved, Pending, Rejected]
+      required: true
+    references:
+      type: list
+      item_type: UUID
+      required: false
+      default: []
+      description: "Other Lore entries this depends on."
+    created_at:
+      type: ISO8601
+      required: true
+      immutable: true
+    created_by:
+      type: string
+      required: true
+      description: "Creator ID, 'entity', or 'audience:{user_id}'."
+    supersedes:
+      type: UUID
+      required: false
+      nullable: true
+      default: null
+
+# =============================================================================
+# Primitive 7: Memory (MemoryStore)
+# =============================================================================
+MemoryStore:
+  description: "Persistent knowledge store: episodic, semantic, relational."
+  fields:
+    entity_id:
+      type: UUID
+      required: true
+    episodic:
+      type: list
+      item_type: EpisodicEntry
+      required: false
+      default: []
+    semantic:
+      type: list
+      item_type: SemanticEntry
+      required: false
+      default: []
+    relational:
+      type: list
+      item_type: RelationalEntry
+      required: false
+      default: []
+    config:
+      type: MemoryConfig
+      required: true
+
+EpisodicEntry:
+  fields:
+    id:
+      type: UUID
+      required: true
+      prefix: "mem-e-"
+    event:
+      type: string
+      required: true
+    context:
+      type: string
+      required: true
+    emotional_valence:
+      type: FloatSigned
+      required: true
+    importance:
+      type: Float01
+      required: true
+    decay_fn:
+      type: DecayFunction
+      required: true
+    created_at:
+      type: ISO8601
+      required: true
+    last_recalled:
+      type: ISO8601
+      required: true
+    stage_id:
+      type: UUID
+      required: false
+      nullable: true
+
+DecayFunction:
+  fields:
+    type:
+      type: enum
+      values: [ExponentialDecay, LinearDecay, NoDecay]
+      required: true
+    half_life:
+      type: Duration
+      required: false
+      nullable: true
+      description: "For ExponentialDecay."
+    rate:
+      type: number
+      required: false
+      nullable: true
+      description: "For LinearDecay, importance reduction per period."
+
+SemanticEntry:
+  fields:
+    id:
+      type: UUID
+      required: true
+      prefix: "mem-s-"
+    fact:
+      type: string
+      required: true
+    confidence:
+      type: Float01
+      required: true
+    source:
+      type: list
+      item_type: UUID
+      required: false
+      default: []
+      description: "Episodic entries that contributed to this."
+    importance:
+      type: Float01
+      required: true
+    created_at:
+      type: ISO8601
+      required: true
+
+RelationalEntry:
+  fields:
+    id:
+      type: UUID
+      required: true
+      prefix: "mem-r-"
+    target_id:
+      type: UUID
+      required: true
+    target_type:
+      type: enum
+      values: [Entity, User]
+      required: true
+    observations:
+      type: list
+      item_type: string
+      required: false
+      default: []
+    sentiment:
+      type: FloatSigned
+      required: true
+    trust:
+      type: Float01
+      required: true
+    last_interaction:
+      type: ISO8601
+      required: true
+
+MemoryConfig:
+  fields:
+    max_episodic:
+      type: integer
+      required: true
+      minimum: 100
+    max_semantic:
+      type: integer
+      required: true
+      minimum: 50
+    decay_floor:
+      type: Float01
+      required: true
+      description: "Importance below this -> eligible for GC."
+    consolidation_interval:
+      type: Duration
+      required: true
+    recall_boost:
+      type: Float01
+      required: true
+      description: "Importance boost when a memory is recalled."
+
+# =============================================================================
+# Primitive 8: Mood
+# =============================================================================
+Mood:
+  description: "Short-lived emotional state that modulates output without overriding IdentityCore."
+  fields:
+    state:
+      type: string
+      required: true
+      description: "Named emotional state."
+    intensity:
+      type: Float01
+      required: true
+    decay_rate:
+      type: Float01
+      required: true
+      description: "Intensity reduction per hour."
+    trigger:
+      type: MoodTrigger
+      required: true
+    trait_mods:
+      type: map
+      key_type: string
+      value_type: number
+      required: false
+      default: {}
+      description: "Temporary additive modifiers to traits."
+    voice_mods:
+      type: VoiceModulation
+      required: false
+      nullable: true
+    started_at:
+      type: ISO8601
+      required: true
+    expires_at:
+      type: ISO8601
+      required: false
+      nullable: true
+      description: "Hard expiration. Null = decay only."
+  invariants:
+    - "decay_rate > 0 OR expires_at is not null (Mood transience invariant)"
+
+MoodTrigger:
+  fields:
+    type:
+      type: enum
+      values: [Event, Directive, ArcTransition, Interaction]
+      required: true
+    source:
+      type: string
+      required: true
+    context:
+      type: string
+      required: false
+      default: ""
+
+VoiceModulation:
+  fields:
+    formality_shift:
+      type: number
+      minimum: -0.3
+      maximum: 0.3
+      required: false
+      default: 0.0
+    intensity_shift:
+      type: number
+      minimum: -0.3
+      maximum: 0.3
+      required: false
+      default: 0.0
+    humor_shift:
+      type: number
+      minimum: -0.3
+      maximum: 0.3
+      required: false
+      default: 0.0
+
+# =============================================================================
+# Primitive 9: Arc
+# =============================================================================
+Arc:
+  description: "Scripted narrative trajectory with phases, transitions, and rollback."
+  fields:
+    id:
+      type: UUID
+      required: true
+      immutable: true
+      prefix: "arc-"
+    entity_id:
+      type: UUID
+      required: true
+      immutable: true
+    name:
+      type: string
+      required: true
+    status:
+      type: enum
+      values: [Planned, Active, Completed, Aborted]
+      required: true
+    phases:
+      type: list
+      item_type: ArcPhase
+      required: true
+      min_items: 1
+      description: "Ordered."
+    current_phase:
+      type: integer
+      required: true
+      minimum: 0
+      description: "Index into phases."
+    pre_arc_snapshot:
+      type: UUID
+      required: true
+      description: "Snapshot taken before arc began."
+    rollback_policy:
+      type: enum
+      values: [AutoOnAbort, ManualOnly, NoRollback]
+      required: true
+    created_at:
+      type: ISO8601
+      required: true
+      immutable: true
+    started_at:
+      type: ISO8601
+      required: false
+      nullable: true
+    completed_at:
+      type: ISO8601
+      required: false
+      nullable: true
+  invariants:
+    - "current_phase >= 0 and current_phase < len(phases)"
+
+ArcPhase:
+  fields:
+    name:
+      type: string
+      required: true
+    description:
+      type: string
+      required: true
+    target_traits:
+      type: map
+      key_type: string
+      value_type: number
+      required: false
+      default: {}
+    mood_tendency:
+      type: string
+      required: false
+      nullable: true
+    new_lore:
+      type: list
+      item_type: Lore
+      required: false
+      nullable: true
+    new_directives:
+      type: list
+      item_type: Directive
+      required: false
+      nullable: true
+    transition:
+      type: TransitionCondition
+      required: true
+    duration_estimate:
+      type: Duration
+      required: false
+      nullable: true
+
+TransitionCondition:
+  fields:
+    type:
+      type: enum
+      values: [TimeBased, EventBased, MetricBased, CreatorManual]
+      required: true
+    condition:
+      type: string
+      required: true
+      description: "Human-readable condition description."
+    evaluator:
+      type: string
+      required: true
+      description: "Module/function that evaluates the condition."
+    auto_advance:
+      type: boolean
+      required: true
+
+# =============================================================================
+# Primitive 10: Relationship
+# =============================================================================
+Relationship:
+  description: "Typed, stateful connection between entity and another entity or user."
+  fields:
+    id:
+      type: UUID
+      required: true
+      immutable: true
+      prefix: "rel-"
+    entity_id:
+      type: UUID
+      required: true
+      immutable: true
+    target_id:
+      type: UUID
+      required: true
+      immutable: true
+    target_type:
+      type: enum
+      values: [Entity, User, UserClass]
+      required: true
+    label:
+      type: string
+      required: true
+    sentiment:
+      type: FloatSigned
+      required: true
+    trust:
+      type: Float01
+      required: true
+    familiarity:
+      type: Float01
+      required: true
+    interaction_count:
+      type: integer
+      required: true
+      minimum: 0
+    last_interaction:
+      type: ISO8601
+      required: true
+    dynamic_rules:
+      type: list
+      item_type: RelationshipRule
+      required: false
+      default: []
+    history_summary:
+      type: string
+      required: false
+      default: ""
+    created_at:
+      type: ISO8601
+      required: true
+      immutable: true
+
+RelationshipRule:
+  fields:
+    trigger:
+      type: string
+      required: true
+    effect:
+      type: string
+      required: true
+    bounds:
+      type: string
+      required: true
+    cooldown:
+      type: Duration
+      required: true
+
+# =============================================================================
+# Primitive 11: Directive
+# =============================================================================
+Directive:
+  description: "Creator-issued instruction scoped and prioritized within identity coherence."
+  fields:
+    id:
+      type: UUID
+      required: true
+      immutable: true
+      prefix: "d-"
+    entity_id:
+      type: UUID
+      required: true
+      immutable: true
+    priority:
+      type: integer
+      required: true
+      minimum: 0
+      maximum: 1000
+    scope:
+      type: DirectiveScope
+      required: true
+    instruction:
+      type: string
+      required: true
+      immutable: true
+      description: "The actual directive, in natural language."
+    rationale:
+      type: string
+      required: false
+      nullable: true
+    expiration:
+      type: DirectiveExpiration
+      required: true
+    status:
+      type: enum
+      values: [Active, Expired, Revoked]
+      required: true
+    created_at:
+      type: ISO8601
+      required: true
+      immutable: true
+    created_by:
+      type: string
+      required: true
+    conflicts_with:
+      type: list
+      item_type: UUID
+      required: false
+      default: []
+      description: "Known conflicting directives (system-detected)."
+
+DirectiveScope:
+  description: "Union type for directive scope."
+  variants:
+    Global:
+      fields: {}
+    Context:
+      fields:
+        stage_id:
+          type: UUID
+          required: true
+    Session:
+      fields:
+        session_id:
+          type: string
+          required: true
+
+DirectiveExpiration:
+  description: "Union type for directive expiration."
+  variants:
+    Permanent:
+      fields: {}
+    ExpiresAt:
+      fields:
+        date:
+          type: ISO8601
+          required: true
+    SingleUse:
+      fields: {}
+
+# =============================================================================
+# Primitive 12: Guardrail
+# =============================================================================
+Guardrail:
+  description: "Inviolable constraint. Cannot be overridden by Directives, Moods, Arcs."
+  fields:
+    id:
+      type: UUID
+      required: true
+      immutable: true
+      prefix: "g-"
+    entity_id:
+      type: UUID
+      required: true
+      immutable: true
+    constraint:
+      type: string
+      required: true
+      immutable: true
+      description: "The rule, in natural language."
+    category:
+      type: enum
+      values: [Safety, Brand, Legal, CreatorDefined]
+      required: true
+    enforcement:
+      type: enum
+      values: [Block, Warn, FlagForReview]
+      required: true
+    evaluator:
+      type: string
+      required: true
+      description: "Module/function that checks compliance."
+    violation_handler:
+      type: string
+      required: true
+      description: "Module/function that handles violations."
+    is_active:
+      type: boolean
+      required: true
+      default: true
+    created_at:
+      type: ISO8601
+      required: true
+      immutable: true
+    created_by:
+      type: string
+      required: true
+    override_allowed:
+      type: boolean
+      required: true
+      description: "Safety guardrails must have override_allowed = false."
+    override_log:
+      type: list
+      item_type: OverrideEntry
+      required: false
+      default: []
+  invariants:
+    - "If category == Safety then override_allowed == false"
+    - "Guardrail supremacy: no other primitive can override a Guardrail"
+
+OverrideEntry:
+  fields:
+    overridden_by:
+      type: string
+      required: true
+    reason:
+      type: string
+      required: true
+    started_at:
+      type: ISO8601
+      required: true
+    ended_at:
+      type: ISO8601
+      required: true
+
+# =============================================================================
+# Primitive 13: DecisionFrame
+# =============================================================================
+DecisionFrame:
+  description: "Ephemeral runtime context assembled per interaction. Single input to generation."
+  fields:
+    id:
+      type: UUID
+      required: true
+      prefix: "df-"
+    entity_id:
+      type: UUID
+      required: true
+    assembled_at:
+      type: ISO8601
+      required: true
+    identity_core:
+      type: IdentityCore
+      required: true
+      description: "Always present, full."
+    traits:
+      type: map
+      key_type: string
+      value_type: number
+      required: true
+      description: "Current values after mood modulation."
+    voice:
+      type: Voice
+      required: true
+      description: "Current, after mood modulation."
+    aesthetic:
+      type: Aesthetic
+      required: true
+      description: "Current, after mood modulation."
+    mood:
+      type: Mood
+      required: false
+      nullable: true
+    relevant_memories:
+      type: list
+      item_type: MemoryEntry
+      required: false
+      default: []
+      description: "Retrieved by relevance, capped by max_memory_entries."
+    active_directives:
+      type: list
+      item_type: Directive
+      required: false
+      default: []
+      description: "Filtered by scope, sorted by priority."
+    guardrails:
+      type: list
+      item_type: Guardrail
+      required: true
+      min_items: 1
+      description: "All active guardrails, always."
+    arc_context:
+      type: ArcPhase
+      required: false
+      nullable: true
+    relationships:
+      type: list
+      item_type: Relationship
+      required: false
+      default: []
+    stage:
+      type: Stage
+      required: true
+    interaction:
+      type: InteractionContext
+      required: true
+    max_memory_entries:
+      type: integer
+      required: true
+      minimum: 1
+  immutable: true
+  lifecycle: "Immutable once assembled. Destroyed after performance. Retained in audit log."
+  invariants:
+    - "DecisionFrame completeness: must contain IdentityCore, all active Guardrails, target Stage."
+
+InteractionContext:
+  fields:
+    type:
+      type: enum
+      values: [Proactive, Reactive, Scheduled]
+      required: true
+    trigger:
+      type: string
+      required: true
+    audience:
+      type: AudienceSpec
+      required: true
+    history:
+      type: list
+      item_type: ExchangeEntry
+      required: false
+      default: []
+
+AudienceSpec:
+  fields:
+    size:
+      type: enum
+      values: [Individual, Small, Large, Broadcast]
+      required: true
+    familiarity:
+      type: Float01
+      required: true
+    context:
+      type: string
+      required: false
+      default: ""
+
+ExchangeEntry:
+  fields:
+    role:
+      type: string
+      required: true
+    text:
+      type: string
+      required: true
+    timestamp:
+      type: ISO8601
+      required: true
+
+MemoryEntry:
+  description: "Reference wrapper for memory retrieval in DecisionFrame."
+  fields:
+    ref:
+      type: UUID
+      required: true
+    relevance:
+      type: Float01
+      required: true
+
+# =============================================================================
+# Primitive 14: Performance
+# =============================================================================
+Performance:
+  description: "Single coherent output event. Atomic unit of entity expression."
+  fields:
+    id:
+      type: UUID
+      required: true
+      immutable: true
+      prefix: "perf-"
+    entity_id:
+      type: UUID
+      required: true
+      immutable: true
+    decision_frame:
+      type: UUID
+      required: true
+      description: "The DecisionFrame that produced this."
+    stage_id:
+      type: UUID
+      required: true
+    campaign_id:
+      type: UUID
+      required: false
+      nullable: true
+    status:
+      type: enum
+      values: [Planning, Executing, Evaluating, Published, Blocked, Failed]
+      required: true
+    plan:
+      type: PerformancePlan
+      required: true
+    output:
+      type: PerformanceOutput
+      required: false
+      nullable: true
+      description: "Null until Executing completes."
+    evaluation:
+      type: EvaluationResult
+      required: false
+      nullable: true
+      description: "Null until Evaluating completes."
+    side_effects:
+      type: SideEffects
+      required: false
+      nullable: true
+    created_at:
+      type: ISO8601
+      required: true
+      immutable: true
+    published_at:
+      type: ISO8601
+      required: false
+      nullable: true
+    generation_attempts:
+      type: integer
+      required: true
+      minimum: 0
+    max_attempts:
+      type: integer
+      required: true
+      default: 3
+      minimum: 1
+  lifecycle: "Never destroyed. All performances retained for audit."
+  invariants:
+    - "Performance auditability: every Published performance must have a logged DecisionFrame."
+
+PerformancePlan:
+  fields:
+    intent:
+      type: string
+      required: true
+    content_type:
+      type: enum
+      values: [Text, Image, Video, Audio, Mixed]
+      required: true
+    tone_target:
+      type: string
+      required: true
+    key_points:
+      type: list
+      item_type: string
+      required: false
+      default: []
+    constraints:
+      type: list
+      item_type: string
+      required: false
+      default: []
+
+PerformanceOutput:
+  fields:
+    content:
+      type: string
+      required: true
+      description: "Actual generated content or media reference."
+    format:
+      type: string
+      required: true
+      description: "MIME type or stage-specific format."
+    metadata:
+      type: map
+      key_type: string
+      value_type: any
+      required: false
+      default: {}
+    token_count:
+      type: integer
+      required: false
+      nullable: true
+
+EvaluationResult:
+  fields:
+    guardrail_pass:
+      type: boolean
+      required: true
+    guardrail_violations:
+      type: list
+      item_type: GuardrailViolation
+      required: false
+      default: []
+    quality_score:
+      type: Float01
+      required: true
+    identity_consistency:
+      type: Float01
+      required: true
+    voice_consistency:
+      type: Float01
+      required: true
+    publish_decision:
+      type: enum
+      values: [Publish, Regenerate, Block]
+      required: true
+    evaluator_notes:
+      type: string
+      required: false
+      default: ""
+
+GuardrailViolation:
+  fields:
+    guardrail_id:
+      type: UUID
+      required: true
+    description:
+      type: string
+      required: true
+
+SideEffects:
+  fields:
+    new_memories:
+      type: list
+      item_type: EpisodicEntry
+      required: false
+      default: []
+    mood_change:
+      type: Mood
+      required: false
+      nullable: true
+    relationship_updates:
+      type: list
+      item_type: RelationshipUpdate
+      required: false
+      default: []
+    trait_nudges:
+      type: list
+      item_type: TraitNudge
+      required: false
+      default: []
+
+RelationshipUpdate:
+  fields:
+    rel_id:
+      type: UUID
+      required: true
+    changes:
+      type: map
+      key_type: string
+      value_type: number
+      required: true
+
+TraitNudge:
+  fields:
+    trait:
+      type: string
+      required: true
+    delta:
+      type: number
+      required: true
+
+# =============================================================================
+# Primitive 15: Stage
+# =============================================================================
+Stage:
+  description: "Media surface where performances occur."
+  fields:
+    id:
+      type: UUID
+      required: true
+      immutable: true
+      prefix: "stage-"
+    name:
+      type: string
+      required: true
+    platform:
+      type: string
+      required: true
+    format:
+      type: FormatSpec
+      required: true
+    audience:
+      type: StageAudienceSpec
+      required: true
+    platform_rules:
+      type: list
+      item_type: string
+      required: false
+      default: []
+    timing:
+      type: TimingSpec
+      required: true
+    adapter_id:
+      type: UUID
+      required: true
+      description: "The Adapter for this Stage. 1:1."
+    is_active:
+      type: boolean
+      required: true
+      default: true
+
+FormatSpec:
+  fields:
+    content_types:
+      type: list
+      item_type: enum
+      enum_values: [Text, Image, Video, Audio, Mixed]
+      required: true
+      min_items: 1
+    max_length:
+      type: integer
+      required: false
+      nullable: true
+      description: "Character/word limit. Null = no limit."
+    supports_threads:
+      type: boolean
+      required: true
+    supports_media:
+      type: boolean
+      required: true
+    supports_links:
+      type: boolean
+      required: true
+    custom_fields:
+      type: map
+      key_type: string
+      value_type: string
+      required: false
+      default: {}
+
+StageAudienceSpec:
+  fields:
+    reach:
+      type: enum
+      values: [Broadcast, Community, Private]
+      required: true
+    demographics:
+      type: string
+      required: false
+      nullable: true
+    expectation:
+      type: string
+      required: true
+
+TimingSpec:
+  fields:
+    optimal_hours:
+      type: list
+      item_type: range
+      required: false
+      default: []
+      description: "Hour ranges (UTC) with best engagement."
+    rate_limit:
+      type: integer
+      required: true
+      minimum: 1
+      description: "Max performances per day."
+    min_interval:
+      type: Duration
+      required: true
+
+# =============================================================================
+# Primitive 16: Adapter
+# =============================================================================
+Adapter:
+  description: "Translation layer: internal state -> stage-appropriate output."
+  fields:
+    id:
+      type: UUID
+      required: true
+      immutable: true
+      prefix: "adapter-"
+    stage_id:
+      type: UUID
+      required: true
+      description: "The Stage this adapter serves. 1:1."
+    adapter_module:
+      type: string
+      required: true
+      description: "Fully qualified module path."
+    version:
+      type: SemVer
+      required: true
+    capabilities:
+      type: list
+      item_type: enum
+      enum_values: [Text, Image, Video, Audio, Mixed]
+      required: true
+      min_items: 1
+    config:
+      type: map
+      key_type: string
+      value_type: any
+      required: false
+      default: {}
+    api_credentials:
+      type: SecretRef
+      required: false
+      nullable: true
+      description: "Reference to stored credentials. Never inline."
+  interface:
+    methods:
+      - name: translate
+        params: [DecisionFrame, PerformancePlan]
+        returns: PerformanceOutput
+      - name: validate
+        params: [PerformanceOutput]
+        returns: ValidationResult
+      - name: publish
+        params: [PerformanceOutput]
+        returns: PublishResult
+      - name: format_preview
+        params: [PerformanceOutput]
+        returns: string
+
+ValidationResult:
+  fields:
+    valid:
+      type: boolean
+      required: true
+    errors:
+      type: list
+      item_type: string
+      required: false
+      default: []
+    warnings:
+      type: list
+      item_type: string
+      required: false
+      default: []
+
+PublishResult:
+  fields:
+    success:
+      type: boolean
+      required: true
+    platform_id:
+      type: string
+      required: false
+      nullable: true
+    url:
+      type: string
+      required: false
+      nullable: true
+    error:
+      type: string
+      required: false
+      nullable: true
+
+# =============================================================================
+# Primitive 17: Epoch
+# =============================================================================
+Epoch:
+  description: "Defined era of entity life with characteristic traits and boundaries."
+  fields:
+    id:
+      type: UUID
+      required: true
+      immutable: true
+      prefix: "epoch-"
+    entity_id:
+      type: UUID
+      required: true
+      immutable: true
+    name:
+      type: string
+      required: true
+    ordinal:
+      type: integer
+      required: true
+      minimum: 0
+      description: "Sequential index, 0-based."
+    status:
+      type: enum
+      values: [Active, Completed, Planned]
+      required: true
+    identity_core_version:
+      type: SemVer
+      required: true
+      description: "Which IdentityCore version governs."
+    trait_ranges:
+      type: map
+      key_type: string
+      value_type: range
+      required: false
+      default: {}
+      description: "Epoch-specific trait bounds override defaults."
+    characteristic_mood:
+      type: string
+      required: false
+      nullable: true
+    start_condition:
+      type: string
+      required: true
+    end_condition:
+      type: string
+      required: true
+    started_at:
+      type: ISO8601
+      required: false
+      nullable: true
+    ended_at:
+      type: ISO8601
+      required: false
+      nullable: true
+    arcs_completed:
+      type: list
+      item_type: UUID
+      required: false
+      default: []
+
+# =============================================================================
+# Primitive 18: DriftRule
+# =============================================================================
+DriftRule:
+  description: "Rule governing how a Trait changes over time."
+  fields:
+    id:
+      type: UUID
+      required: true
+      immutable: true
+      prefix: "drift-"
+    entity_id:
+      type: UUID
+      required: true
+      immutable: true
+    trait_name:
+      type: string
+      required: true
+      description: "Which Trait this rule governs."
+    rate:
+      type: number
+      required: true
+      minimum: 0
+      description: "Magnitude of change per period."
+    period:
+      type: Duration
+      required: true
+    direction:
+      type: DriftDirection
+      required: true
+    triggers:
+      type: list
+      item_type: DriftTrigger
+      required: false
+      default: []
+    bounds:
+      type: range
+      item_type: number
+      length: 2
+      required: true
+      description: "Absolute limits, override everything."
+    is_active:
+      type: boolean
+      required: true
+    last_applied:
+      type: ISO8601
+      required: true
+
+DriftDirection:
+  fields:
+    type:
+      type: enum
+      values: [TowardValue, TowardInteractions, RandomWalk, Decay]
+      required: true
+    target:
+      type: number
+      required: false
+      nullable: true
+      description: "For TowardValue."
+    bias:
+      type: number
+      minimum: -1.0
+      maximum: 1.0
+      required: false
+      nullable: true
+      description: "For RandomWalk."
+
+DriftTrigger:
+  fields:
+    event:
+      type: string
+      required: true
+    multiplier:
+      type: number
+      required: true
+      description: "Rate multiplier when triggered."
+    direction_override:
+      type: DriftDirection
+      required: false
+      nullable: true
+    cooldown:
+      type: Duration
+      required: true
+
+# =============================================================================
+# Primitive 19: Snapshot
+# =============================================================================
+Snapshot:
+  description: "Complete immutable serialization of entity state at a point in time."
+  fields:
+    id:
+      type: UUID
+      required: true
+      immutable: true
+      prefix: "snap-"
+    entity_id:
+      type: UUID
+      required: true
+      immutable: true
+    trigger:
+      type: enum
+      values: [EpochBoundary, PreArc, CreatorRequested, Scheduled]
+      required: true
+    entity_version:
+      type: SemVer
+      required: true
+    state:
+      type: SerializedEntityState
+      required: true
+    checksum:
+      type: string
+      required: true
+      description: "SHA256 integrity hash."
+    size_bytes:
+      type: integer
+      required: true
+      minimum: 0
+    created_at:
+      type: ISO8601
+      required: true
+      immutable: true
+    created_by:
+      type: string
+      required: true
+    tags:
+      type: list
+      item_type: string
+      required: false
+      default: []
+    parent_snapshot:
+      type: UUID
+      required: false
+      nullable: true
+      description: "For lineage tracking."
+  immutable: true
+  invariants:
+    - "Snapshot immutability: no field may be modified after creation."
+    - "Checksum verified on read."
+
+SerializedEntityState:
+  fields:
+    identity_core:
+      type: IdentityCore
+      required: true
+    traits:
+      type: map
+      key_type: string
+      value_type: Trait
+      required: true
+    voice:
+      type: Voice
+      required: true
+    aesthetic:
+      type: Aesthetic
+      required: true
+    lore:
+      type: list
+      item_type: Lore
+      required: true
+    memory:
+      type: MemoryStore
+      required: true
+    mood:
+      type: Mood
+      required: false
+      nullable: true
+    arcs:
+      type: list
+      item_type: Arc
+      required: true
+    relationships:
+      type: map
+      key_type: UUID
+      value_type: Relationship
+      required: true
+    directives:
+      type: list
+      item_type: Directive
+      required: true
+    guardrails:
+      type: list
+      item_type: Guardrail
+      required: true
+    epoch:
+      type: Epoch
+      required: true
+    drift_rules:
+      type: list
+      item_type: DriftRule
+      required: true
+
+# =============================================================================
+# Primitive 20: Campaign
+# =============================================================================
+Campaign:
+  description: "Coordinated multi-performance plan across stages and time."
+  fields:
+    id:
+      type: UUID
+      required: true
+      immutable: true
+      prefix: "camp-"
+    entity_id:
+      type: UUID
+      required: true
+      immutable: true
+    name:
+      type: string
+      required: true
+    status:
+      type: enum
+      values: [Draft, Active, Paused, Completed, Cancelled]
+      required: true
+    strategy:
+      type: CampaignStrategy
+      required: true
+    timeline:
+      type: list
+      item_type: ScheduledPerformance
+      required: true
+      min_items: 1
+    coherence_rules:
+      type: list
+      item_type: CoherenceRule
+      required: false
+      default: []
+    success_metrics:
+      type: list
+      item_type: Metric
+      required: false
+      default: []
+    arc_id:
+      type: UUID
+      required: false
+      nullable: true
+      description: "Optionally tied to an Arc."
+    created_at:
+      type: ISO8601
+      required: true
+      immutable: true
+    started_at:
+      type: ISO8601
+      required: false
+      nullable: true
+    completed_at:
+      type: ISO8601
+      required: false
+      nullable: true
+    created_by:
+      type: string
+      required: true
+
+CampaignStrategy:
+  fields:
+    objective:
+      type: string
+      required: true
+    themes:
+      type: list
+      item_type: string
+      required: false
+      default: []
+    tone_arc:
+      type: string
+      required: true
+    audience_targets:
+      type: list
+      item_type: string
+      required: false
+      default: []
+
+ScheduledPerformance:
+  fields:
+    performance_id:
+      type: UUID
+      required: false
+      nullable: true
+      description: "Null until generated."
+    stage_id:
+      type: UUID
+      required: true
+    scheduled_at:
+      type: ISO8601
+      required: true
+    content_brief:
+      type: string
+      required: true
+    status:
+      type: enum
+      values: [Pending, Generated, Published, Skipped]
+      required: true
+    depends_on:
+      type: list
+      item_type: UUID
+      required: false
+      default: []
+
+CoherenceRule:
+  fields:
+    rule:
+      type: string
+      required: true
+    stages:
+      type: list
+      item_type: UUID
+      required: true
+      min_items: 1
+    enforcement:
+      type: enum
+      values: [Hard, Soft]
+      required: true
+
+Metric:
+  fields:
+    name:
+      type: string
+      required: true
+    target:
+      type: number
+      required: true
+    measurement:
+      type: string
+      required: true
+    window:
+      type: Duration
+      required: true

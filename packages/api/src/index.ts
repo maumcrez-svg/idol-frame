@@ -35,6 +35,9 @@ import { ArcDirector } from '../../state/src/arc-director.js'
 import { DriftEngine } from '../../state/src/drift-engine.js'
 import { DriftTracker } from '../../state/src/drift-tracker.js'
 import { EpochManager } from '../../state/src/epoch-manager.js'
+import { WalletManager } from '../../state/src/wallet-manager.js'
+import { CoinbaseWalletProvider } from '../../state/src/coinbase-wallet-provider.js'
+import { StripeWalletProvider } from '../../state/src/stripe-wallet-provider.js'
 
 // Cognition
 import { FrameAssembler } from '../../cognition/src/frame-assembler.js'
@@ -69,6 +72,7 @@ import { registerDriftRuleRoutes } from './routes/drift-rules.js'
 import { registerEpochRoutes } from './routes/epochs.js'
 import { registerMemoryRoutes } from './routes/memory.js'
 import { registerDriftHistoryRoutes } from './routes/drift-history.js'
+import { registerWalletRoutes } from './routes/wallets.js'
 
 // Schema
 import type { Stage } from '../../schema/src/index.js'
@@ -109,6 +113,34 @@ async function main() {
   const epochManager = new EpochManager(storage.documents)
   const driftEngine = new DriftEngine(storage.documents, traitEngine, driftTracker, epochManager)
 
+  // --- Initialize wallet subsystem ---
+  const walletManager = new WalletManager(storage.documents)
+  let stripeProviderRef: StripeWalletProvider | null = null
+
+  // Register Coinbase provider if credentials available
+  // Initialize is async — provider reports isReady()=false until complete
+  if (process.env.CDP_API_KEY_ID) {
+    const coinbaseProvider = new CoinbaseWalletProvider()
+    await coinbaseProvider.initialize({
+      cdp_api_key_id: process.env.CDP_API_KEY_ID,
+      cdp_api_key_secret: process.env.CDP_API_KEY_SECRET,
+      cdp_wallet_secret: process.env.CDP_WALLET_SECRET,
+      network_id: process.env.COINBASE_NETWORK_ID,
+      paymaster_url: process.env.COINBASE_PAYMASTER_URL,
+    }).catch(err => console.warn('Coinbase provider init skipped:', err.message))
+    walletManager.registerProvider('Coinbase', coinbaseProvider)
+  }
+
+  // Register Stripe provider if credentials available
+  if (process.env.STRIPE_API_KEY) {
+    const stripeProvider = new StripeWalletProvider()
+    await stripeProvider.initialize({
+      stripe_api_key: process.env.STRIPE_API_KEY,
+    }).catch(err => console.warn('Stripe provider init skipped:', err.message))
+    walletManager.registerProvider('Stripe', stripeProvider)
+    stripeProviderRef = stripeProvider
+  }
+
   // --- Initialize consolidation ---
   const memoryConsolidator = new MemoryConsolidator(storage.documents, storage.vectors, llm, memoryManager)
 
@@ -119,7 +151,7 @@ async function main() {
   const directiveResolver = new DirectiveResolver(storage.documents)
   const frameAssembler = new FrameAssembler(
     entityStore, identityCoreManager, voiceRegistry, traitEngine, memoryRetriever, storage.documents,
-    moodController, directiveResolver, arcDirector,
+    moodController, directiveResolver, arcDirector, walletManager,
   )
 
   // --- Initialize performance subsystem ---
@@ -129,7 +161,7 @@ async function main() {
   const groundingEvaluator = new GroundingEvaluator(llm, memoryRetriever, memoryManager)
   const performanceEvaluator = new PerformanceEvaluator(guardrailEnforcer, identityEvaluator, voiceAnalyzer, groundingEvaluator)
   const publisher = new Publisher(storage.performanceLog)
-  const sideEffectProcessor = new SideEffectProcessor(memoryManager, moodController)
+  const sideEffectProcessor = new SideEffectProcessor(memoryManager, moodController, walletManager)
   const healthAggregator = new HealthAggregator(storage.performanceLog)
 
   // Default text stage (deterministic ID, persisted)
@@ -196,6 +228,7 @@ async function main() {
   registerEpochRoutes(app, { epochManager, entityStore })
   registerMemoryRoutes(app, { entityStore, memoryRetriever, memoryConsolidator, vectors: storage.vectors })
   registerDriftHistoryRoutes(app, { driftTracker, entityStore })
+  registerWalletRoutes(app, { walletManager, entityStore, docs: storage.documents })
 
   // --- System routes ---
   app.get('/health', async () => {
@@ -221,7 +254,7 @@ async function main() {
     return {
       status: allOk ? 'ok' : 'degraded',
       version: '1.0.0',
-      phase: 2,
+      phase: 1,
       checks,
     }
   })
@@ -250,6 +283,10 @@ async function main() {
     if (hybridVectors.flush && hybridVectors.pendingCount > 0) {
       app.log.info('Final vector flush...')
       await hybridVectors.flush()
+    }
+    if (stripeProviderRef) {
+      app.log.info('Closing Stripe MCP connection...')
+      await stripeProviderRef.close()
     }
     await app.close()
     process.exit(0)

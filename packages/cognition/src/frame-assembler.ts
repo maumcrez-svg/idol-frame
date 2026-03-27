@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid'
-import type { DecisionFrame, InteractionContext, VoiceModulation } from '../../schema/src/index.js'
+import type { DecisionFrame, InteractionContext, VoiceModulation, WalletContext } from '../../schema/src/index.js'
 import type { EntityStore, IdentityCoreManager, VoiceRegistry, TraitEngine } from '../../identity/src/index.js'
 import { AestheticRegistry } from '../../identity/src/index.js'
 import type { MemoryRetriever } from './memory-retriever.js'
@@ -9,6 +9,7 @@ import { GuardrailSchema } from '../../schema/src/index.js'
 import type { Guardrail, Stage } from '../../schema/src/index.js'
 import type { MoodController } from '../../state/src/mood-controller.js'
 import type { ArcDirector } from '../../state/src/arc-director.js'
+import type { WalletManager } from '../../state/src/wallet-manager.js'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
@@ -25,6 +26,7 @@ export class FrameAssembler {
     private moodController: MoodController,
     private directiveResolver: DirectiveResolver,
     private arcDirector: ArcDirector,
+    private walletManager?: WalletManager,
   ) {}
 
   // Invariant 8: DecisionFrame assembly fails if IdentityCore, Guardrails, or Stage missing
@@ -87,6 +89,12 @@ export class FrameAssembler {
       ? await this.memoryRetriever.retrieve(input.entity_id, input.query, 5)
       : []
 
+    // Resolve wallet context (if wallet subsystem available)
+    let walletContext: WalletContext | null = null
+    if (this.walletManager) {
+      walletContext = this.resolveWalletContext(input.entity_id, resolvedDirectives)
+    }
+
     const frame: DecisionFrame = {
       id: `df-${uuid()}`,
       entity_id: input.entity_id,
@@ -98,6 +106,7 @@ export class FrameAssembler {
       mood: currentMood,
       arc: activeArc,
       directives: resolvedDirectives,
+      wallet_context: walletContext,
       stage: input.stage,
       interaction_context: input.interaction_context,
       assembled_at: new Date().toISOString(),
@@ -107,5 +116,50 @@ export class FrameAssembler {
     this.docs.put('decision_frames', frame.id, frame)
 
     return frame
+  }
+
+  private resolveWalletContext(
+    entityId: string,
+    directives: { instruction: string }[],
+  ): WalletContext | null {
+    if (!this.walletManager) return null
+
+    const wallets = this.walletManager.getByEntity(entityId)
+    if (wallets.length === 0) return null
+
+    // Use the first active wallet
+    const wallet = wallets.find(w => w.status === 'Active')
+    if (!wallet) return null
+
+    // Extract auto-fund config from directives
+    let autoFundEnabled = false
+    let autoFundThreshold: number | null = null
+
+    for (const directive of directives) {
+      const instruction = directive.instruction.toLowerCase()
+      if (instruction.includes('auto-fund') || instruction.includes('auto_fund')) {
+        autoFundEnabled = true
+        const thresholdMatch = instruction.match(/threshold[:\s]*\$?(\d+(?:\.\d+)?)/i)
+        if (thresholdMatch) {
+          autoFundThreshold = parseFloat(thresholdMatch[1])
+        }
+      }
+    }
+
+    // Get provider capabilities
+    const provider = this.walletManager.getProvider(wallet.provider.type)
+    const capabilities = provider?.getCapabilities() ?? []
+
+    return {
+      wallet_id: wallet.id,
+      provider_type: wallet.provider.type,
+      balance: wallet.balance,
+      currency: wallet.currency,
+      capabilities,
+      allowed_categories: wallet.spending_limits.allowed_categories,
+      per_transaction_limit: wallet.spending_limits.per_transaction,
+      auto_fund_enabled: autoFundEnabled,
+      auto_fund_threshold: autoFundThreshold,
+    }
   }
 }
